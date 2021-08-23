@@ -11,7 +11,7 @@ Before it can talk to a gRPC service, `grpctl` needs to know where to find it.
 Create a service and set the address used:
 
 ```sh
-$ grpctl service snoot set address localhost:50051
+$ grpctl service set snoot address localhost:50051
 ```
 
 Here we've configured the `snoot` service to connect to `localhost:50051`.
@@ -20,7 +20,7 @@ Here we've configured the `snoot` service to connect to `localhost:50051`.
 
 ### Interacting with a service
 
-Once an address is registered for a service, it's name can be used as a direct subcommand of `grpctl`.
+Once an address is registered for a service, its name can be used as a direct subcommand of `grpctl`.
 
 Following along with the previous example, run the new `snoot` service subcommand with the `--help` option to see what procedures it provides:
 
@@ -46,6 +46,6 @@ By default, `grpctl` will try to use [gRPC server reflection](https://grpc.githu
 Source the `snoot` service's service definitions from `snoot.proto`:
 
 ```sh
-$ grpctl service snoot set protoc snoot.proto
+$ grpctl service set snoot proto snoot.proto
 ```
 
