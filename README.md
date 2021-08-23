@@ -4,25 +4,25 @@ A [grpc_cli](https://grpc.github.io/grpc/core/md_doc_command_line_tool.html) ins
 
 ## Usage
 
-### Creating a context
+### Creating a service
 
 Before it can talk to a gRPC service, `grpctl` needs to know where to find it.
 
-Create a context and set the address used:
+Create a service and set the address used:
 
 ```sh
-$ grpctl context snoot set address localhost:50051
+$ grpctl service snoot set address localhost:50051
 ```
 
-Here we've configured the `snoot` context to connect to `localhost:50051`.
+Here we've configured the `snoot` service to connect to `localhost:50051`.
 
-> Note: the name "context" is reserved and cannot be used as the name of a user set context.
+> Note: the name "service" is reserved and cannot be used as the name of a user set service.
 
 ### Interacting with a service
 
-Once a context has been created, it can be used as a direct subcommand of `grpctl`.
+Once an address is registered for a service, it's name can be used as a direct subcommand of `grpctl`.
 
-Run the service subcommand with the `--help` option to see what procedures it provides:
+Following along with the previous example, run the new `snoot` service subcommand with the `--help` option to see what procedures it provides:
 
 ```sh
 $ grpctl snoot --help
@@ -41,9 +41,11 @@ Flags:
 
 ### Command discovery
 
-By default, `grpctl` will try to use [gRPC server reflection](https://grpc.github.io/grpc/core/md_doc_server-reflection.html) to discover available procedures at runtime, but it can also be configured to use a local protoc file as well.
+By default, `grpctl` will try to use [gRPC server reflection](https://grpc.github.io/grpc/core/md_doc_server-reflection.html) to discover available procedures at runtime, but it can also be configured to use a local `.proto` file as well.
+
+Source the `snoot` service's service definitions from `snoot.proto`:
 
 ```sh
-$ grpctl context my-service set protoc my-service.protoc
+$ grpctl service snoot set protoc snoot.proto
 ```
 
