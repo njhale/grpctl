@@ -20,6 +20,8 @@ func rootCmd() (*cobra.Command, error) {
 		},
 	}
 
+	cmd.SetOut(os.Stdout)
+
 	configFS, err := internal.DefaultConfigFS()
 	if err != nil {
 		return nil, err
@@ -62,7 +64,6 @@ func Execute() {
 
 	if err != nil {
 		fmt.Println(err)
-		// cmd.PrintErrln(err)
 		os.Exit(1)
 	}
 }
