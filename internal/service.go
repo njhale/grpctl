@@ -15,6 +15,7 @@ import (
 type Service struct {
 	Name    string
 	Address string
+	Proto   string
 }
 
 type FS interface {
