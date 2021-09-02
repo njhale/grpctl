@@ -9,106 +9,104 @@ import (
 	yaml "gopkg.in/yaml.v2"
 )
 
-type serviceStore interface {
-	Set(internal.Service) error
-	Get(string) (internal.Service, error)
+type serverStore interface {
+	Set(internal.Server) error
+	Get(string) (internal.Server, error)
 	Remove(string) error
-	List() ([]internal.Service, error)
+	List() ([]internal.Server, error)
 }
 
-func serviceCmd(store serviceStore) *cobra.Command {
+func configCmd(store serverStore) *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "service",
+		Use:   "config",
 		Short: "",
 		Long:  ``,
-		Args:  cobra.MinimumNArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			// TODO(njhale): implement this!
-			cmd.Printf("in parent with args: %v\n", args)
-			return nil
-		},
 	}
 
-	cmd.AddCommand(serviceSetCmd(store))
-	cmd.AddCommand(serviceGetCmd(store))
-	cmd.AddCommand(serviceListCmd(store))
-	cmd.AddCommand(serviceRemoveCmd(store))
+	cmd.AddCommand(configSetCmd(store))
+	cmd.AddCommand(configGetCmd(store))
+	cmd.AddCommand(configListCmd(store))
+	cmd.AddCommand(configRemoveCmd(store))
 
 	return cmd
 }
 
-func serviceSetCmd(store serviceStore) *cobra.Command {
+func configSetCmd(store serverStore) *cobra.Command {
 	return &cobra.Command{
-		Use:   "set <name> [address|proto] <value>",
-		Short: "configure settings for interacting with a service",
+		Use:   "set <server> address|proto <value>",
+		Short: "configure settings for interacting with a server",
 		Long:  ``,
 		Args:  cobra.ExactArgs(3),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			// TODO(njhale): Use cobra callbacks for argument validation
 			name := args[0]
-			service, err := store.Get(name)
+			if name == "server" {
+				return fmt.Errorf(`"server" is a reserved word and cannot be used as a server name`)
+			}
+
+			server, err := store.Get(name)
 			if err != nil {
 				return err
 			}
 
-			// TODO(njhale): Use cobra callbacks for argument validation
-			service.Name = name
+			server.Name = name
 			switch setting, value := args[1], args[2]; setting {
 			case "address":
-				service.Address = value
+				server.Address = value
 			case "proto":
-				service.Proto = value
+				server.Proto = value
 			default:
-				return fmt.Errorf("Unknown service setting %s", setting)
+				return fmt.Errorf("unknown server setting %s", setting)
 			}
 
-			return store.Set(service)
+			return store.Set(server)
 		},
 	}
 }
 
-func serviceGetCmd(store serviceStore) *cobra.Command {
+func configGetCmd(store serverStore) *cobra.Command {
 	return &cobra.Command{
-		Use:   "get <name>",
-		Short: "get configuration for a service",
+		Use:   "get <server>",
+		Short: "get configuration for a server",
 		Long:  ``,
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			service, err := store.Get(args[0])
+			server, err := store.Get(args[0])
 			if err != nil {
 				return err
 			}
 
 			// TODO(njhale): Improve formatting
-			printYaml(cmd.OutOrStdout(), service)
+			printYaml(cmd.OutOrStdout(), server)
 
 			return nil
 		},
 	}
 }
 
-func serviceListCmd(store serviceStore) *cobra.Command {
+func configListCmd(store serverStore) *cobra.Command {
 	return &cobra.Command{
 		Use:   "list",
-		Short: "list configurations for all known services",
+		Short: "list configurations for all known servers",
 		Long:  ``,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			services, err := store.List()
+			servers, err := store.List()
 			if err != nil {
 				return err
 			}
 
 			// TODO(njhale): Improve formatting
-			printYaml(cmd.OutOrStdout(), services)
+			printYaml(cmd.OutOrStdout(), servers)
 
 			return nil
 		},
 	}
 }
 
-func serviceRemoveCmd(store serviceStore) *cobra.Command {
+func configRemoveCmd(store serverStore) *cobra.Command {
 	return &cobra.Command{
-		Use:   "remove <name>",
-		Short: "remove configuration for a service",
+		Use:   "remove <server>",
+		Short: "remove configuration for a server",
 		Long:  ``,
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
