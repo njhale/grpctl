@@ -6,6 +6,14 @@ A [grpc_cli](https://grpc.github.io/grpc/core/md_doc_command_line_tool.html) ins
 
 ## Usage
 
+### Installation
+
+`grpctl` can be installed via [Homebrew](https://brew.sh) on both mac and linux:
+
+```sh
+brew install --HEAD njhale/tap/grpctl
+```
+
 ### Configuring a server
 
 Before it can talk to a gRPC server, `grpctl` needs to know where to find it.
