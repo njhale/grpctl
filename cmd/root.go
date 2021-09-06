@@ -18,7 +18,6 @@ func rootCmd() (*cobra.Command, error) {
 		Long:  ``,
 		// Args:  cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			fmt.Printf("args in root: %v", args)
 			return nil
 		},
 	}
@@ -50,14 +49,12 @@ func rootCmd() (*cobra.Command, error) {
 	}
 	var cmd *cobra.Command
 	for _, server := range servers {
-		// TODO(njhale): lazy-load generated command trees
 		if server.Name == sub {
-			cmd, err = serverCmd(server, discovery)
+			cmd, err = serverCmd(discovery, &server)
 		} else {
-			cmd, err = serverCmd(server, nil)
+			cmd, err = serverCmd(nil, &server)
 		}
 		if err != nil {
-			// TODO(njhale): elide services with connectivity issues instead of bailing out
 			return nil, err
 		}
 

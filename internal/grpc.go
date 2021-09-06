@@ -6,6 +6,8 @@ import (
 
 	"github.com/jhump/protoreflect/desc"
 	"github.com/jhump/protoreflect/desc/protoparse"
+	"github.com/jhump/protoreflect/dynamic"
+	"github.com/jhump/protoreflect/dynamic/grpcdynamic"
 	"github.com/jhump/protoreflect/grpcreflect"
 	"google.golang.org/grpc"
 	reflectpb "google.golang.org/grpc/reflection/grpc_reflection_v1alpha"
@@ -41,7 +43,9 @@ func WithParser(parser Parser) ServiceDiscoveryOption {
 func NewServiceDiscovery(opts ...ServiceDiscoveryOption) (*serviceDiscovery, error) {
 	// Create default
 	discovery := &serviceDiscovery{
-		parser: protoparse.Parser{},
+		parser:           protoparse.Parser{},
+		services:         map[string][]*desc.ServiceDescriptor{},
+		messageFactories: map[string]*dynamic.MessageFactory{},
 	}
 	WithBlockingDial(context.Background(), grpc.WithInsecure())(discovery)
 
@@ -56,24 +60,78 @@ func NewServiceDiscovery(opts ...ServiceDiscoveryOption) (*serviceDiscovery, err
 type serviceDiscovery struct {
 	parser Parser
 	dial   DialFunc
+
+	services         map[string][]*desc.ServiceDescriptor
+	messageFactories map[string]*dynamic.MessageFactory
 }
 
-func (s *serviceDiscovery) Services(server Server) ([]*desc.ServiceDescriptor, error) {
-	// TODO(njhale): memoize ServiceDescriptors
+func (s *serviceDiscovery) Stub(server *Server) (*grpcdynamic.Stub, error) {
+	address := server.Address
+	if address == "" {
+		return nil, fmt.Errorf("server has no address")
+	}
 
-	var (
-		services []*desc.ServiceDescriptor
-		err      error
+	messageFactory, err := s.MessageFactory(server)
+	if err != nil {
+		return nil, fmt.Errorf("error getting message factory: %w", err)
+	}
+
+	stub := grpcdynamic.NewStubWithMessageFactory(
+		&lazyChannel{
+			dial:    s.dial,
+			address: address,
+		},
+		messageFactory,
 	)
 
+	return &stub, nil
+}
+
+func (s *serviceDiscovery) MessageFactory(server *Server) (*dynamic.MessageFactory, error) {
+	// If found, return memoized MessageFactory
+	factory, ok := s.messageFactories[server.Name]
+	if ok {
+		return factory, nil
+	}
+
+	services, err := s.Services(server)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(services) < 1 {
+		return nil, fmt.Errorf("server has no services")
+	}
+
+	extensionRegistry := dynamic.NewExtensionRegistryWithDefaults()
+	extensionRegistry.AddExtensionsFromFileRecursively(services[0].GetFile())
+
+	factory = dynamic.NewMessageFactoryWithExtensionRegistry(extensionRegistry)
+
+	// Memoize MessageFactory
+	s.messageFactories[server.Name] = factory
+
+	return factory, nil
+}
+
+func (s *serviceDiscovery) Services(server *Server) ([]*desc.ServiceDescriptor, error) {
+	// If found, return memoized services
+	services, ok := s.services[server.Name]
+	if ok {
+		return services, nil
+	}
+
+	var err error
 	switch proto, address := server.Proto, server.Address; {
 	case proto != "":
 		services, err = s.servicesFromProto(server.Proto)
-		if err != nil {
-			err = fmt.Errorf("proto parse error: %w", err)
+		if err == nil {
+			break
 		}
+
+		err = fmt.Errorf("proto parse error: %w", err)
+		fallthrough // Fall back on server reflection
 	case address != "":
-		fmt.Printf("getting services from reflection for %s\n", server.Name)
 		services, err = s.servicesFromReflection(server.Address)
 		if err != nil {
 			err = fmt.Errorf("server reflection error: %w", err)
@@ -81,6 +139,9 @@ func (s *serviceDiscovery) Services(server Server) ([]*desc.ServiceDescriptor, e
 	default:
 		err = fmt.Errorf("no server proto or address defined")
 	}
+
+	// Memoize services
+	s.services[server.Name] = services
 
 	return services, err
 }
@@ -110,13 +171,11 @@ func (s *serviceDiscovery) servicesFromProto(proto string) ([]*desc.ServiceDescr
 }
 
 func (s *serviceDiscovery) servicesFromReflection(address string) ([]*desc.ServiceDescriptor, error) {
-	fmt.Println("dialing...")
 	cc, err := s.dial(address)
 	if err != nil {
 		return nil, err
 	}
 	defer cc.Close()
-	fmt.Println("connected to server")
 
 	ctx := context.TODO()
 	client := grpcreflect.NewClient(ctx, reflectpb.NewServerReflectionClient(cc))
@@ -145,4 +204,43 @@ func (s *serviceDiscovery) servicesFromReflection(address string) ([]*desc.Servi
 	}
 
 	return services, nil
+}
+
+type lazyChannel struct {
+	address string
+	dial    DialFunc
+}
+
+func (l *lazyChannel) Invoke(ctx context.Context, method string, args, reply interface{}, opts ...grpc.CallOption) error {
+	cc, err := l.dial(l.address)
+	if err != nil {
+		return err
+	}
+	defer cc.Close()
+
+	return cc.Invoke(ctx, method, args, reply, opts...)
+}
+
+func (l *lazyChannel) NewStream(ctx context.Context, desc *grpc.StreamDesc, method string, opts ...grpc.CallOption) (grpc.ClientStream, error) {
+	cc, err := l.dial(l.address)
+	if err != nil {
+		return nil, err
+	}
+
+	stream, err := cc.NewStream(ctx, desc, method, opts...)
+	if err != nil {
+		defer cc.Close()
+		return nil, err
+	}
+
+	go func() {
+		// Be sure to close the connection with the given context
+		defer cc.Close()
+		select {
+		case <-ctx.Done():
+		}
+	}()
+
+	return stream, nil
+
 }
