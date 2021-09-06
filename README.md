@@ -4,25 +4,25 @@ A [grpc_cli](https://grpc.github.io/grpc/core/md_doc_command_line_tool.html) ins
 
 ## Usage
 
-### Creating a service
+### Configuring a server
 
-Before it can talk to a gRPC service, `grpctl` needs to know where to find it.
+Before it can talk to a gRPC server, `grpctl` needs to know where to find it.
 
-Create a service and set the address used:
+Create a server configuration and set the address used:
 
 ```sh
-$ grpctl service set snoot address localhost:50051
+$ grpctl config set snoot address localhost:50051
 ```
 
-Here we've configured the `snoot` service to connect to `localhost:50051`.
+Here we've configured the `snoot` server to connect to `localhost:50051`.
 
-> Note: the name "service" is reserved and cannot be used as the name of a user set service.
+> Note: the name "server" is reserved and cannot be used as the name of a user set server.
 
-### Interacting with a service
+### Interacting with a server
 
-Once an address is registered for a service, its name can be used as a direct subcommand of `grpctl`.
+Once an address is registered for a server, its name can be used as a direct subcommand of `grpctl`.
 
-Following along with the previous example, run the new `snoot` service subcommand with the `--help` option to see what procedures it provides:
+Following along with the previous example, run the new `snoot` server subcommand with the `--help` option to see what methods it provides:
 
 ```sh
 $ grpctl snoot --help
@@ -39,13 +39,23 @@ Flags:
   -h, --help  help for snoot
 ```
 
+### Method commands
+
+The methods of a service exposed by a configured server are made direct subcommands of that server's command if they are unique among all other services exposed by that server.
+
+### Service commands
+
+The services exposed by a server are always made direct subcommands of that server's command.
+
+Service commands are hidden unless they share method names with other services from the same server.
+
 ### Command discovery
 
-By default, `grpctl` will try to use [gRPC server reflection](https://grpc.github.io/grpc/core/md_doc_server-reflection.html) to discover available procedures at runtime, but it can also be configured to use a local `.proto` file as well.
+By default, `grpctl` will try to use [gRPC server reflection](https://grpc.github.io/grpc/core/md_doc_server-reflection.html) to discover available services at runtime, but it can also be configured to use a local `.proto` file as well.
 
 Source the `snoot` service's service definitions from `snoot.proto`:
 
 ```sh
-$ grpctl service set snoot proto snoot.proto
+$ grpctl config set snoot proto snoot.proto
 ```
 
