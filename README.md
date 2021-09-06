@@ -1,5 +1,7 @@
 # grpctl
 
+[![Build Status](https://github.com/njhale/grpctl/workflows/build/badge.svg)](https://github.com/njhale/grpctl/actions)
+
 A [grpc_cli](https://grpc.github.io/grpc/core/md_doc_command_line_tool.html) inspired utility that attempts to provide a more natural command-line experience for any [gRPC](https://grpc.io/) service.
 
 ## Usage
