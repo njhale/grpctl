@@ -3,7 +3,13 @@ package internal
 import (
 	"context"
 	"fmt"
+	"strings"
 
+	"github.com/bufbuild/buf/private/bufpkg/bufmodule"
+	registryv1alpha1 "github.com/bufbuild/buf/private/gen/proto/apiclient/buf/alpha/registry/v1alpha1/registryv1alpha1apiclient"
+	bufclient "github.com/bufbuild/buf/private/gen/proto/apiclientgrpc"
+	imagev1 "github.com/bufbuild/buf/private/gen/proto/go/buf/alpha/image/v1"
+	bufgrpc "github.com/bufbuild/buf/private/pkg/transport/grpc/grpcclient"
 	"github.com/jhump/protoreflect/desc"
 	"github.com/jhump/protoreflect/desc/protoparse"
 	"github.com/jhump/protoreflect/dynamic"
@@ -11,14 +17,27 @@ import (
 	"github.com/jhump/protoreflect/grpcreflect"
 	"google.golang.org/grpc"
 	reflectpb "google.golang.org/grpc/reflection/grpc_reflection_v1alpha"
+	"google.golang.org/protobuf/types/descriptorpb"
 )
 
+// DialFunc returns a connection to a gRPC server.
+// TODO(njhale): add context parameter
 type DialFunc func(address string) (*grpc.ClientConn, error)
+
+// NewClientConn implements buf's ClientConnProvider interface.
+func (d DialFunc) NewClientConn(_ context.Context, address string) (grpc.ClientConnInterface, error) {
+	return d(address)
+}
+
+var _ bufgrpc.ClientConnProvider = new(DialFunc)
 
 type Parser interface {
 	ParseFiles(filenames ...string) ([]*desc.FileDescriptor, error)
 }
 
+type BufServiceProvider interface {
+	registryv1alpha1.ImageServiceProvider
+}
 type ServiceDiscoveryOption func(*serviceDiscovery)
 
 func WithBlockingDial(ctx context.Context, opts ...grpc.DialOption) ServiceDiscoveryOption {
@@ -40,6 +59,14 @@ func WithParser(parser Parser) ServiceDiscoveryOption {
 	}
 }
 
+func WithBufServiceProvider(buf BufServiceProvider) ServiceDiscoveryOption {
+	return func(s *serviceDiscovery) {
+		s.buf = buf
+	}
+}
+
+// NewServiceDiscovery returns an instance of serviceDiscovery, configured with the given options, that is capable of discovering gRPC services.
+// The instance returned IS NOT threadsafe.
 func NewServiceDiscovery(opts ...ServiceDiscoveryOption) (*serviceDiscovery, error) {
 	// Create default
 	discovery := &serviceDiscovery{
@@ -54,12 +81,17 @@ func NewServiceDiscovery(opts ...ServiceDiscoveryOption) (*serviceDiscovery, err
 		opt(discovery)
 	}
 
+	if discovery.buf == nil {
+		discovery.buf = bufclient.NewProvider(nil, discovery.dial).BufAlphaRegistryV1alpha1()
+	}
+
 	return discovery, nil
 }
 
 type serviceDiscovery struct {
 	parser Parser
 	dial   DialFunc
+	buf    BufServiceProvider
 
 	services         map[string][]*desc.ServiceDescriptor
 	messageFactories map[string]*dynamic.MessageFactory
@@ -123,6 +155,13 @@ func (s *serviceDiscovery) Services(server *Server) ([]*desc.ServiceDescriptor, 
 
 	var err error
 	switch proto, address := server.Proto, server.Address; {
+	case strings.HasPrefix(proto, bufPrefix):
+		services, err = s.servicesFromBuf(proto)
+		if err == nil {
+			break
+		}
+
+		err = fmt.Errorf("buf fetch error: %w", err)
 	case proto != "":
 		services, err = s.servicesFromProto(server.Proto)
 		if err == nil {
@@ -144,6 +183,71 @@ func (s *serviceDiscovery) Services(server *Server) ([]*desc.ServiceDescriptor, 
 	s.services[server.Name] = services
 
 	return services, err
+}
+
+// TODO(njhale): Maybe we should factor the following methods out into their own serviceDiscovery types, DI them, and use the factory method pattern?
+
+const (
+	// For now, only support the central buf registry
+	bufPrefix = "buf.build"
+)
+
+func (s *serviceDiscovery) servicesFromBuf(module string) ([]*desc.ServiceDescriptor, error) {
+	ref, err := bufmodule.ModuleReferenceForString(module)
+	if err != nil {
+		return nil, err
+	}
+
+	// TODO(njhale): Memoize ImageServices
+	ctx := context.TODO()
+	imageService, err := s.buf.NewImageService(ctx, ref.Remote())
+	if err != nil {
+		return nil, err
+	}
+
+	image, err := imageService.GetImage(ctx, ref.Owner(), ref.Repository(), ref.Reference())
+	if err != nil {
+		return nil, err
+	}
+
+	fds, err := desc.CreateFileDescriptors(toFileDescriptorProtos(image.GetFile()))
+	if err != nil {
+		return nil, err
+	}
+
+	var services []*desc.ServiceDescriptor
+	for _, fd := range fds {
+		services = append(fd.GetServices(), services...)
+	}
+
+	return services, nil
+
+}
+
+func toFileDescriptorProtos(imageFiles []*imagev1.ImageFile) []*descriptorpb.FileDescriptorProto {
+	var fds []*descriptorpb.FileDescriptorProto
+	for _, imageFile := range imageFiles {
+		fds = append(fds, toFileDescriptorProto(imageFile))
+	}
+
+	return fds
+}
+
+func toFileDescriptorProto(imageFile *imagev1.ImageFile) *descriptorpb.FileDescriptorProto {
+	return &descriptorpb.FileDescriptorProto{
+		Name:             imageFile.Name,
+		Package:          imageFile.Package,
+		Dependency:       imageFile.Dependency,
+		PublicDependency: imageFile.PublicDependency,
+		WeakDependency:   imageFile.WeakDependency,
+		MessageType:      imageFile.MessageType,
+		EnumType:         imageFile.EnumType,
+		Service:          imageFile.Service,
+		Extension:        imageFile.Extension,
+		Options:          imageFile.Options,
+		SourceCodeInfo:   imageFile.SourceCodeInfo,
+		Syntax:           imageFile.Syntax,
+	}
 }
 
 func (s *serviceDiscovery) servicesFromProto(proto string) ([]*desc.ServiceDescriptor, error) {
