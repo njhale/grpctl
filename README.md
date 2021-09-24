@@ -2,7 +2,7 @@
 
 [![Build Status](https://github.com/njhale/grpctl/workflows/build/badge.svg)](https://github.com/njhale/grpctl/actions)
 
-A [grpc_cli](https://grpc.github.io/grpc/core/md_doc_command_line_tool.html) inspired utility that attempts to provide a more natural command-line experience for any [gRPC](https://grpc.io/) service.
+A [grpc\_cli](https://grpc.github.io/grpc/core/md_doc_command_line_tool.html) inspired utility that attempts to provide a more natural command-line experience for any [gRPC](https://grpc.io/) service.
 
 ## Usage
 
@@ -10,7 +10,7 @@ A [grpc_cli](https://grpc.github.io/grpc/core/md_doc_command_line_tool.html) ins
 
 `grpctl` can be installed via [Homebrew](https://brew.sh) on both mac and linux:
 
-```sh
+```bash
 brew install --HEAD njhale/tap/grpctl
 ```
 
@@ -20,7 +20,7 @@ Before it can talk to a gRPC server, `grpctl` needs to know where to find it.
 
 Create a server configuration and set the address used:
 
-```sh
+```bash
 $ grpctl config set snoot address localhost:50051
 ```
 
@@ -34,7 +34,7 @@ Once an address is registered for a server, its name can be used as a direct sub
 
 Following along with the previous example, run the new `snoot` server subcommand with the `--help` option to see what methods it provides:
 
-```sh
+```bash
 $ grpctl snoot --help
 my favorite service!
 
@@ -65,7 +65,7 @@ By default, `grpctl` will try to use [gRPC server reflection](https://grpc.githu
 
 Source the `snoot` service's service definitions from `snoot.proto`:
 
-```sh
+```bash
 $ grpctl config set snoot proto snoot.proto
 ```
 
